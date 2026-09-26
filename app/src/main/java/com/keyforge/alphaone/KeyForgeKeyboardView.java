@@ -51,6 +51,9 @@ public class KeyForgeKeyboardView extends View {
             BLUE=Color.rgb(20,112,235), NAVY=Color.rgb(18,38,78), BLACK=Color.rgb(25,29,34),
             GREEN=Color.rgb(45,205,55), ENTER_BG=Color.rgb(225,238,255), BACKSPACE_BG=Color.rgb(255,232,232), NUMBER_BG=Color.rgb(232,231,224), SPACE_BG=Color.rgb(242,224,145);
     private boolean englishMode = false;
+    private boolean hideTopRow = false;
+    private boolean hideSuggestionRow = false;
+    private static final float[] SOURCE_BANDS = {0f,122f,206f,342f,470f,600f,722f,856f};
     private int KEY;
 
     public KeyForgeKeyboardView(KeyForgeInputMethodService s){
@@ -806,35 +809,67 @@ public class KeyForgeKeyboardView extends View {
         super.onDraw(c);
         float w=getWidth(),h=getHeight();
         gap=dp(4);
-        // Six normal key rows plus a half-height suggestion row.
-        keyH=(h-gap*8f)/7.62f;
+        keyH=Math.max(1f,h/7f);
         suggestionH=keyH*0.62f;
-
         drawKeyboard(c);
-
         if (resizeMode) {
-            // Visible bottom-right resize grip; it appears only in the explicit resize mode.
-            p.setColor(NAVY);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(3);
+            p.setColor(NAVY); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(3);
             float g = Math.min(42f, Math.min(w, h) * 0.10f);
             c.drawLine(w - g, h - 7, w - 7, h - g, p);
             c.drawLine(w - g - 7, h - 7, w - 7, h - g - 7, p);
             p.setStyle(Paint.Style.FILL);
         }
+    }
 
-
+    private float[] visibleRowBounds(){
+        float total=0f;
+        for(int i=0;i<7;i++) if(!((i==0&&hideTopRow)||(i==1&&hideSuggestionRow))) total += SOURCE_BANDS[i+1]-SOURCE_BANDS[i];
+        float[] out=new float[8]; float y=0f; out[0]=0f;
+        for(int i=0;i<7;i++){
+            if((i==0&&hideTopRow)||(i==1&&hideSuggestionRow)){ out[i+1]=y; continue; }
+            y += (SOURCE_BANDS[i+1]-SOURCE_BANDS[i])/total; out[i+1]=y;
+        }
+        return out;
     }
 
     private void drawKeyboard(Canvas c){
         float w=getWidth(), h=getHeight();
-        gap=dp(4);
-        keyH=(h-gap*8f)/7f;
-        if(referenceKeyboard!=null){
-            Rect src=new Rect(0,0,referenceKeyboard.getWidth(),referenceKeyboard.getHeight());
-            RectF dst=new RectF(0,0,w,h);
+        if(referenceKeyboard==null) return;
+        float[] bounds=visibleRowBounds();
+        for(int i=0;i<7;i++){
+            if((i==0&&hideTopRow)||(i==1&&hideSuggestionRow)) continue;
+            Rect src=new Rect(0,Math.round(SOURCE_BANDS[i]),referenceKeyboard.getWidth(),Math.round(SOURCE_BANDS[i+1]));
+            RectF dst=new RectF(0,bounds[i]*h,w,bounds[i+1]*h);
             p.setAlpha(255); p.setFilterBitmap(true); p.setStyle(Paint.Style.FILL);
             c.drawBitmap(referenceKeyboard,src,dst,p);
+        }
+        if(englishMode) drawEnglishRows(c,bounds);
+    }
+
+    private void drawEnglishRows(Canvas c,float[] bounds){
+        String[][] rows={
+            {"1","2","3","4","5","6","7","8","9","0","-","="},
+            {"Q","W","E","R","T","Y","U","I","O","P","[","]","\\"},
+            {"Caps","A","S","D","F","G","H","J","K","L",";","'",""},
+            {"Z","X","C","V","B","N","M",",",".","/","?","",""}
+        };
+        int[] logical={2,3,4,5};
+        for(int z=0;z<logical.length;z++){
+            int row=logical[z];
+            float y0=bounds[row]*getHeight(), y1=bounds[row+1]*getHeight();
+            float left=dp(4), right=getWidth()-dp(4);
+            boolean reserveRight=(row==2 || row==3 || row==4);
+            if(reserveRight) right=getWidth()*.914f;
+            int count=rows[z].length;
+            float ww=(right-left-dp(4)*(count-1))/count;
+            for(int i=0;i<count;i++){
+                float l=left+i*(ww+dp(4));
+                key(c,l,y0,l+ww,y1,rows[z][i],NAVY,false);
+            }
+            if(row==3 || row==4){
+                float enterL=getWidth()*.914f;
+                keyWithBackground(c,enterL,y0,getWidth()-dp(4),y1,"Enter",NAVY,ENTER_BG,false);
+            }
         }
     }
 
@@ -990,18 +1025,22 @@ public class KeyForgeKeyboardView extends View {
     }
 
     private int getRowAt(float y){
-        float rowH=getHeight()/7f;
         if(y<0 || y>getHeight()) return -1;
-        return Math.max(0,Math.min(6,(int)(y/rowH)));
+        float[] b=visibleRowBounds();
+        for(int i=0;i<7;i++){
+            if((i==0&&hideTopRow)||(i==1&&hideSuggestionRow)) continue;
+            if(y>=b[i]*getHeight() && y<=b[i+1]*getHeight()) return i;
+        }
+        return -1;
     }
 
-    private float rowTop(int row){ return row*(getHeight()/7f); }
+    private float rowTop(int row){ return visibleRowBounds()[row]*getHeight(); }
 
     private void pressRectFor(float x,float y,boolean held){
         int row=getRowAt(y);
         if(row<0){clearPressGlowNow();return;}
-        float rowH=getHeight()/7f;
-        setPressGlow(0,row*rowH,getWidth(),(row+1)*rowH,held);
+        float[] b=visibleRowBounds();
+        setPressGlow(0,b[row]*getHeight(),getWidth(),b[row+1]*getHeight(),held);
     }
 
     @Override public boolean onTouchEvent(MotionEvent e){
@@ -1092,10 +1131,11 @@ public class KeyForgeKeyboardView extends View {
             else if(i==9) showClipboardHistory();
             else if(i==10) showDrawer();
             else if(i==11) showMouseControls();
-            else if(i==12) service.requestHideSelf(0);
+            else if(i==12){ hideTopRow=true; invalidate(); }
             return;
         }
         if(row==1){
+            if(nx>0.73f && nx<0.88f){ hideSuggestionRow=true; invalidate(); return; }
             if(nx<0.17f && !suggestions[0].isEmpty()) service.replaceCurrentWord(suggestions[0]);
             else if(nx<0.31f && !suggestions[1].isEmpty()) service.replaceCurrentWord(suggestions[1]);
             else if(nx<0.47f && !suggestions[2].isEmpty()) service.replaceCurrentWord(suggestions[2]);
@@ -1112,19 +1152,22 @@ public class KeyForgeKeyboardView extends View {
         }
         if(row==3){
             if(nx>0.91f){service.enter();return;}
-            String[] keys={"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج","چ","گ"};
-            int i=Math.min(12,(int)(nx/0.069f)); service.type(keys[i]); return;
+            String[] keys=englishMode?new String[]{"q","w","e","r","t","y","u","i","o","p","[","]","\\"}:new String[]{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج","چ","پ"};
+            int i=Math.min(12,(int)(nx/0.069f)); service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
         if(row==4){
             if(nx>0.91f){service.enter();return;}
-            String[] keys={"Caps","ظ","ط","ز","ر","ذ","ژ","د","ت","ن","م","ک","گ"};
+            String[] keys=englishMode?new String[]{"Caps","a","s","d","f","g","h","j","k","l",";","'",""}:new String[]{"Caps","ظ","ط","ز","ر","ذ","ژ","د","ت","ن","م","ک","گ"};
             int i=Math.min(12,(int)(nx/0.069f));
             if(i==0){caps=!caps;invalidate();return;}
-            service.type(keys[i]); return;
+            if(englishMode && keys[i].isEmpty()) return;
+            service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
         if(row==5){
-            String[] keys={"ش","س","ی","ک","ب","ل","ا","ت","ن","م","گ","گ","؟","،"};
-            int i=Math.min(13,(int)(nx/0.071f)); service.type(keys[i]); return;
+            String[] keys=englishMode?new String[]{"z","x","c","v","b","n","m",",",".","/","?","",""}:new String[]{"ش","س","ی","ک","ب","ل","ا","ت","ن","م","و","ء","؟","،"};
+            int i=Math.min(13,(int)(nx/0.071f));
+            if(englishMode && keys[i].isEmpty()) return;
+            service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
         if(row==6){
             if(nx<0.09f){showSymbolPicker();return;}
