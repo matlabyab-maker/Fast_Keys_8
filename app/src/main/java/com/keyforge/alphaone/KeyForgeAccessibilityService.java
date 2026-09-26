@@ -51,6 +51,7 @@ public class KeyForgeAccessibilityService extends AccessibilityService {
     public static void click(boolean right){ if(instance!=null)instance.tap(right); }
     public static void disable(){ if(instance!=null) instance.stopSelf(); }
     public static void scrollToTop(){ if(instance!=null) instance.scrollTop(); }
+    public static void scrollToBottom(){ if(instance!=null) instance.scrollBottom(); }
     private void tap(boolean right){ if(right){longPress(cursorX,cursorY);return;} if(clickNodeAt(getRootInActiveWindow(),cursorX,cursorY)) return; clickAt(cursorX,cursorY); }
     private void scrollTop(){
         // Use both mechanisms, not one as a fallback for the other. Some
@@ -70,6 +71,38 @@ public class KeyForgeAccessibilityService extends AccessibilityService {
         handler.post(runner[0]);
     }
 
+
+    private void scrollBottom(){
+        final int[] pass={0};
+        final Runnable[] runner=new Runnable[1];
+        runner[0]=() -> {
+            if(pass[0]++ >= 60) return;
+            AccessibilityNodeInfo root=getRootInActiveWindow();
+            scrollNodesForward(root);
+            swipeUpToBottom(() -> handler.postDelayed(runner[0],120));
+        };
+        handler.post(runner[0]);
+    }
+
+    private void swipeUpToBottom(final Runnable done){
+        float x=Math.max(dp(40),Math.min(screenW-dp(40),screenW/2f));
+        float y1=Math.min(screenH*0.68f,screenH-dp(220));
+        float y2=Math.max(dp(90),screenH*0.18f);
+        if(y1<=y2+dp(40)){ done.run(); return; }
+        Path path=new Path(); path.moveTo(x,y1); path.lineTo(x,y2);
+        GestureDescription g=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,700)).build();
+        dispatchGesture(g,new GestureResultCallback(){
+            @Override public void onCompleted(GestureDescription gestureDescription){done.run();}
+            @Override public void onCancelled(GestureDescription gestureDescription){handler.postDelayed(done,220);}
+        },null);
+    }
+
+    private boolean scrollNodesForward(AccessibilityNodeInfo node){
+        if(node==null)return false; boolean moved=false;
+        try{ if(node.isScrollable()) moved|=node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
+            for(int i=0;i<node.getChildCount();i++) moved|=scrollNodesForward(node.getChild(i));
+        }catch(Exception ignored){} return moved;
+    }
     private void swipeDownToTop(final Runnable done){
         float x=Math.max(dp(40),Math.min(screenW-dp(40),screenW/2f));
         float y1=Math.max(dp(90),screenH*0.18f);

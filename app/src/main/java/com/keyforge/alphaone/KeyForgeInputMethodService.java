@@ -421,6 +421,11 @@ public class KeyForgeInputMethodService extends InputMethodService {
         else { InputConnection ic=getCurrentInputConnection(); if(ic!=null) ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_MOVE_HOME)); if(ic!=null) ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_MOVE_HOME)); }
     }
 
+    public void scrollToBottom() {
+        if (KeyForgeAccessibilityService.isEnabled()) KeyForgeAccessibilityService.scrollToBottom();
+        else { InputConnection ic=getCurrentInputConnection(); if(ic!=null) ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_MOVE_END)); if(ic!=null) ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_MOVE_END)); }
+    }
+
     public void escape() {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;

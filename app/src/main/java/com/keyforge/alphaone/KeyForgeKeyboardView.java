@@ -47,11 +47,13 @@ public class KeyForgeKeyboardView extends View {
         {"تایپ","تایپی","تایپ کردن"},{"کلمه","کلمات","کلمه‌های"}
     };
     private final int BG=Color.rgb(239,238,232), DEFAULT_KEY=Color.rgb(250,249,244),
-            BLUE=Color.rgb(20,112,235), NAVY=Color.rgb(18,38,78), BLACK=Color.rgb(25,29,34),
+            BLUE=Color.rgb(20,112,235), NAVY=Color.rgb(18,38,78), NUMBER_BROWN=Color.rgb(116,58,24), BLACK=Color.rgb(25,29,34),
             GREEN=Color.rgb(45,205,55), ENTER_BG=Color.rgb(225,238,255), BACKSPACE_BG=Color.rgb(255,232,232), NUMBER_BG=Color.rgb(232,231,224), SPACE_BG=Color.rgb(242,224,145);
     private boolean englishMode = false;
     private boolean hideTopRow = false;
     private boolean hideSuggestionRow = false;
+    private boolean capsBlinkOn = false;
+    private final Runnable capsBlink = new Runnable(){ public void run(){ if(caps){ capsBlinkOn=!capsBlinkOn; invalidate(); handler.postDelayed(this,420); } else { capsBlinkOn=false; invalidate(); } } };
     private static final float[] SOURCE_BANDS = {0f,122f,206f,342f,470f,600f,722f,856f};
     private int KEY;
 
@@ -84,8 +86,14 @@ public class KeyForgeKeyboardView extends View {
         p.setStrokeWidth(1);
         c.drawRoundRect(l,t,r,b,rad,rad,p);
         p.setStyle(Paint.Style.FILL);
-        if(label!=null&&!label.isEmpty())
-            txt(c,label,(l+r)/2,(t+b)/2,Math.min(22,(b-t)*.42f),color);
+        if(label!=null&&!label.isEmpty()){
+            String[] parts=label.split("\\n",-1);
+            if(parts.length==2){
+                float fs=Math.min(20,(b-t)*.28f);
+                txt(c,parts[0],(l+r)/2,t+(b-t)*.34f,fs,color);
+                txt(c,parts[1],(l+r)/2,t+(b-t)*.70f,fs,color);
+            } else txt(c,label,(l+r)/2,(t+b)/2,Math.min(22,(b-t)*.42f),color);
+        }
     }
 
     private void keyWithBackground(Canvas c,float l,float t,float r,float b,String label,int textColor,int backgroundColor,boolean square){
@@ -354,7 +362,7 @@ public class KeyForgeKeyboardView extends View {
 
     private void showAndKeepKeyboard(PopupWindow popup, Runnable action) {
         popup.dismiss();
-        postDelayed(action, 80);
+        postDelayed(action, 15);
     }
 
     private Button drawerButton(String text) {
@@ -591,12 +599,10 @@ public class KeyForgeKeyboardView extends View {
         ScrollView scroll=new ScrollView(service);
         LinearLayout all=new LinearLayout(service); all.setOrientation(LinearLayout.VERTICAL);
         GridLayout grid=new GridLayout(service); grid.setColumnCount(8); grid.setPadding(6,6,6,6);
-        for(String emoji:emojis) addEmojiButton(grid, emoji);
         all.addView(grid, new LinearLayout.LayoutParams(-1,-2));
         TextView countryTitle=new TextView(service); countryTitle.setText("پرچم کشورها"); countryTitle.setTextColor(NAVY); countryTitle.setTextSize(15); countryTitle.setGravity(Gravity.CENTER);
         all.addView(countryTitle,new LinearLayout.LayoutParams(-1,dp(34)));
         GridLayout countryGrid=new GridLayout(service); countryGrid.setColumnCount(8); countryGrid.setPadding(4,2,4,2);
-        addCountryFlags(countryGrid);
         all.addView(countryGrid,new LinearLayout.LayoutParams(-1,-2));
         scroll.addView(all,new ScrollView.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
@@ -604,6 +610,7 @@ public class KeyForgeKeyboardView extends View {
         popup.setBackgroundDrawable(new ColorDrawable(Color.WHITE)); popup.setTouchable(true); popup.setFocusable(false); popup.setOutsideTouchable(true); popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED); popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING); popup.setElevation(10f);
         headerClose[0].setOnClickListener(v->popup.dismiss());
         popup.showAtLocation(this,Gravity.TOP|Gravity.CENTER_HORIZONTAL,0,dp(6));
+        root.post(() -> { for(String emoji:emojis) addEmojiButton(grid, emoji); addCountryFlags(countryGrid); });
     }
 
     private void addCountryFlags(GridLayout grid) {
@@ -886,7 +893,7 @@ public class KeyForgeKeyboardView extends View {
         String[] sym={"!","@","#","$","%","^","&","*","(",")","=","+"};
         for(int i=0;i<n;i++){
             String label=(caps? (sym[i]+"\n"+nums[i]) : (i==0?"!\n"+nums[i]:i==1?"@\n"+nums[i]:i==2?"#\n"+nums[i]:i==3?"$\n"+nums[i]:i==4?"%\n"+nums[i]:i==5?"^\n"+nums[i]:i==6?"&\n"+nums[i]:i==7?"*\n"+nums[i]:i==8?"(\n"+nums[i]:i==9?")\n"+nums[i]:i==10?"-\n=":"+\n="));
-            drawTwoLineKey(c,i*(cw+gapPx)+gapPx,top,i*(cw+gapPx)+gapPx+cw,bottom,label);
+            drawTwoLineKey(c,i*(cw+gapPx)+gapPx,top,i*(cw+gapPx)+gapPx+cw,bottom,label,NUMBER_BROWN);
         }
         keyWithBackground(c,getWidth()-reserved+gapPx/2,top,getWidth()-gapPx,bottom,"⌫",NAVY,BACKSPACE_BG,false);
     }
@@ -899,7 +906,9 @@ public class KeyForgeKeyboardView extends View {
         int count=keys.length; float cw=(right-left-gapPx*(count-1))/count;
         for(int i=0;i<count;i++){
             float l=left+i*(cw+gapPx);
-            key(c,l,top,l+cw,bottom,keys[i],NAVY,false);
+            if(!first && i==0 && englishMode && caps && capsBlinkOn){
+                keyWithBackground(c,l,top,l+cw,bottom,keys[i],Color.WHITE,GREEN,false);
+            } else key(c,l,top,l+cw,bottom,keys[i],NAVY,false);
         }
         if(!first) keyWithBackground(c,getWidth()-reserved,top,getWidth()-gapPx,bottom,"Enter",NAVY,ENTER_BG,false);
     }
@@ -927,10 +936,10 @@ public class KeyForgeKeyboardView extends View {
         }
     }
 
-    private void drawTwoLineKey(Canvas c,float l,float t,float r,float b,String label){
-        key(c,l,t,r,b,"",NAVY,false);
+    private void drawTwoLineKey(Canvas c,float l,float t,float r,float b,String label,int textColor){
+        key(c,l,t,r,b,"",textColor,false);
         String[] a=label.split("\\n",-1);
-        if(a.length==2){ txt(c,a[0],(l+r)/2,t+(b-t)*.34f,Math.min(20,(b-t)*.28f),NAVY); txt(c,a[1],(l+r)/2,t+(b-t)*.69f,Math.min(20,(b-t)*.28f),NAVY); }
+        if(a.length==2){ txt(c,a[0],(l+r)/2,t+(b-t)*.34f,Math.min(20,(b-t)*.28f),textColor); txt(c,a[1],(l+r)/2,t+(b-t)*.69f,Math.min(20,(b-t)*.28f),textColor); }
         else txt(c,label,(l+r)/2,(t+b)/2,Math.min(20,(b-t)*.35f),NAVY);
     }
 
@@ -1197,6 +1206,26 @@ public class KeyForgeKeyboardView extends View {
         return getRowAt(y)==2 && x>getWidth()*0.90f;
     }
 
+    private int indexForEqualRow(float x, float left, float right, int count){
+        float g=dp(4);
+        float cw=(right-left-g*(count-1))/count;
+        for(int i=0;i<count;i++){ float l=left+i*(cw+g); if(x>=l && x<=l+cw) return i; }
+        return -1;
+    }
+    private int topToolbarIndex(float x){
+        float[] weights={0.061f,0.061f,0.062f,0.095f,0.104f,0.080f,0.075f,0.076f,0.076f,0.080f,0.085f,0.061f,0.084f};
+        float g=dp(4), total=0; for(float q:weights) total+=q;
+        float scale=(getWidth()-g*(weights.length-1))/total, pos=0;
+        for(int i=0;i<weights.length;i++){ float cw=weights[i]*scale; if(x>=pos && x<=pos+cw) return i; pos+=cw+g; }
+        return -1;
+    }
+    private int suggestionIndex(float x){
+        float g=dp(4); float[] widths={0.12f,0.16f,0.19f,0.25f,0.13f,0.13f};
+        float usable=getWidth()-g*(widths.length+1), pos=g;
+        for(int i=0;i<widths.length;i++){ float cw=usable*widths[i]; if(x>=pos&&x<=pos+cw) return i; pos+=cw+g; }
+        return -1;
+    }
+
     private void handle(float x,float y){
         float w=getWidth(), h=getHeight();
         int row=getRowAt(y);
@@ -1205,10 +1234,9 @@ public class KeyForgeKeyboardView extends View {
 
         if(row==0){
             // Normalized zones taken directly from the supplied reference image.
-            float[] cuts={0.061f,0.122f,0.184f,0.279f,0.383f,0.463f,0.538f,0.614f,0.690f,0.770f,0.855f,0.916f,1.0f};
-            int i=0; while(i<cuts.length && nx>cuts[i]) i++;
-            if(i==0) service.move(KeyEvent.KEYCODE_DPAD_DOWN);
-            else if(i==1) service.move(KeyEvent.KEYCODE_DPAD_UP);
+            int i=topToolbarIndex(x); if(i<0) return;
+            if(i==0) service.scrollToBottom();
+            else if(i==1) service.scrollToTop();
             else if(i==2) service.voiceSearch(englishMode?"en-US":"fa-IR");
             else if(i==3) service.copyAll();
             else if(i==4) service.copyScreen();
@@ -1223,16 +1251,21 @@ public class KeyForgeKeyboardView extends View {
             return;
         }
         if(row==1){
-            if(nx>0.74f && nx<0.88f){ hideSuggestionRow=true; invalidate(); return; }
-            if(nx<0.17f && !suggestions[0].isEmpty()) service.replaceCurrentWord(suggestions[0]);
-            else if(nx<0.31f && !suggestions[1].isEmpty()) service.replaceCurrentWord(suggestions[1]);
-            else if(nx<0.47f && !suggestions[2].isEmpty()) service.replaceCurrentWord(suggestions[2]);
+            int si=suggestionIndex(x);
+            if(si==4){ hideSuggestionRow=true; invalidate(); return; }
+            if(si==0 && !suggestions[0].isEmpty()) service.replaceCurrentWord(suggestions[0]);
+            else if(si==1 && !suggestions[1].isEmpty()) service.replaceCurrentWord(suggestions[1]);
+            else if(si==2 && !suggestions[2].isEmpty()) service.replaceCurrentWord(suggestions[2]);
+            else if(si==3 && !suggestions[3].isEmpty()) service.replaceCurrentWord(suggestions[3]);
             return;
         }
         if(row==2){
             if(nx>0.91f){startBackspace();return;}
-            int i=(int)(nx/0.077f);
-            if(i<0)i=0; if(i>11)i=11;
+            float gapPx=dp(4), reserved=getWidth()*0.115f;
+            float available=getWidth()-reserved-gapPx*13; float cw=available/12f;
+            int i=-1;
+            for(int k=0;k<12;k++){ float l=gapPx+k*(cw+gapPx); if(x>=l && x<=l+cw){ i=k; break; } }
+            if(i<0 || i>11) return;
             String[] normal=englishMode?new String[]{"1","2","3","4","5","6","7","8","9","0","-","="}:new String[]{"۱","۲","۳","۴","۵","۶","۷","۸","۹","۰","-","="};
             String[] shifted={"!","@","#","$","%","^","&","*","(",")","_","+"};
             service.type(caps?shifted[i]:normal[i]);
@@ -1241,19 +1274,23 @@ public class KeyForgeKeyboardView extends View {
         if(row==3){
             if(nx>0.91f){service.enter();return;}
             String[] keys=englishMode?new String[]{"q","w","e","r","t","y","u","i","o","p","[","]","\\"}:new String[]{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج","چ","پ"};
-            int i=Math.min(12,(int)(nx/0.069f)); service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
+            int i=indexForEqualRow(x,dp(4),getWidth()-getWidth()*0.087f-dp(4),keys.length);
+            if(i<0 || i>=keys.length) return;
+            service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
         if(row==4){
             if(nx>0.91f){service.enter();return;}
             String[] keys=englishMode?new String[]{"Caps","a","s","d","f","g","h","j","k","l",";","'",""}:new String[]{"Caps","ظ","ط","ز","ر","ذ","ژ","د","ت","ن","م","ک","گ"};
-            int i=Math.min(12,(int)(nx/0.069f));
-            if(i==0){caps=!caps;invalidate();return;}
+            int i=indexForEqualRow(x,dp(4),getWidth()-getWidth()*0.087f-dp(4),keys.length);
+            if(i<0 || i>=keys.length) return;
+            if(i==0){caps=!caps; if(caps){ capsBlinkOn=true; handler.removeCallbacks(capsBlink); handler.postDelayed(capsBlink,420); } else { capsBlinkOn=false; handler.removeCallbacks(capsBlink); } invalidate();return;}
             if(englishMode && keys[i].isEmpty()) return;
             service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
         if(row==5){
             String[] keys=englishMode?new String[]{"z","x","c","v","b","n","m",",",".","/","?","",""}:new String[]{"ش","س","ی","ک","ب","ل","ا","ت","ن","م","و","ء","؟","،"};
-            int i=Math.min(13,(int)(nx/0.071f));
+            int i=indexForEqualRow(x,dp(4),getWidth()-dp(4),keys.length);
+            if(i<0 || i>=keys.length) return;
             if(englishMode && keys[i].isEmpty()) return;
             service.type(englishMode ? (caps?keys[i].toUpperCase(Locale.US):keys[i]) : keys[i]); return;
         }
@@ -1284,10 +1321,12 @@ public class KeyForgeKeyboardView extends View {
         root.addView(actions);
         final MousePadView pad=new MousePadView(service);
         root.addView(pad,new LinearLayout.LayoutParams(-1,0,1f));
-        LinearLayout clicks=new LinearLayout(service); clicks.setGravity(Gravity.CENTER);
-        Button left=drawerButton("کلیک چپ"); left.setOnClickListener(v->KeyForgeAccessibilityService.click(false));
-        Button right=drawerButton("کلیک راست"); right.setOnClickListener(v->KeyForgeAccessibilityService.click(true));
-        clicks.addView(left,new LinearLayout.LayoutParams(0,dp(54),1f)); clicks.addView(right,new LinearLayout.LayoutParams(0,dp(54),1f));
+        LinearLayout clicks=new LinearLayout(service); clicks.setGravity(Gravity.CENTER); clicks.setPadding(dp(6),0,dp(6),0);
+        Button left=drawerButton("کلیک چپ"); left.setMinWidth(0); left.setMinimumWidth(0); left.setOnClickListener(v->KeyForgeAccessibilityService.click(false));
+        Button right=drawerButton("کلیک راست"); right.setMinWidth(0); right.setMinimumWidth(0); right.setOnClickListener(v->KeyForgeAccessibilityService.click(true));
+        LinearLayout.LayoutParams lpLeft=new LinearLayout.LayoutParams(0,dp(50),1f); lpLeft.setMargins(dp(4),0,dp(4),0);
+        LinearLayout.LayoutParams lpRight=new LinearLayout.LayoutParams(0,dp(50),1f); lpRight.setMargins(dp(4),0,dp(4),0);
+        clicks.addView(left,lpLeft); clicks.addView(right,lpRight);
         root.addView(clicks);
         Button stop=drawerButton("خاموش کردن موس");
         stop.setOnClickListener(v -> KeyForgeAccessibilityService.disable());
@@ -1322,6 +1361,7 @@ public class KeyForgeKeyboardView extends View {
         addPopupHeader(root, "نمادها", headerClose);
         ScrollView scroll=new ScrollView(service);
         GridLayout grid=new GridLayout(service); grid.setColumnCount(6); grid.setPadding(4,4,4,4);
+        root.post(() -> {
         for(String s:symbols){
             Button b=new Button(service); b.setText(s); b.setTextSize(20); b.setAllCaps(false); b.setTextColor(Color.RED);
             GridLayout.LayoutParams lp=new GridLayout.LayoutParams(); lp.width=0; lp.height=dp(58); lp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f); lp.setMargins(2,2,2,2); grid.addView(b,lp);
@@ -1336,6 +1376,7 @@ for(String s:moreSymbols){ Button b=new Button(service); b.setText(s); b.setText
         popup.setBackgroundDrawable(new ColorDrawable(Color.WHITE)); popup.setTouchable(true); popup.setFocusable(false); popup.setOutsideTouchable(true); popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED); popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING); popup.setElevation(10f);
         headerClose[0].setOnClickListener(v->popup.dismiss());
         popup.showAtLocation(this,Gravity.CENTER,0,0);
+
     }
 
     private void setSymbolButtonRepeat(Button b, String symbol){
@@ -1381,3 +1422,5 @@ for(String s:moreSymbols){ Button b=new Button(service); b.setText(s); b.setText
         }
     }
 }
+        });
+
