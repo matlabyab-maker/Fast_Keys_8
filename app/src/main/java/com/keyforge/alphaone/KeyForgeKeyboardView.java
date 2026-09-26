@@ -133,9 +133,10 @@ public class KeyForgeKeyboardView extends View {
         Button resize = drawerButton("Resize / Float");
         Button mouse = drawerButton("موس صفحه وب");
         Button calculator = drawerButton("ماشین حساب");
+        Button command = drawerButton("Command");
 
         Button quickSettings = drawerButton("Quick Settings");
-        Button[] buttons={transparency,palette,emoji,steering,arabic,history,magnifierButton,resize,mouse,calculator,quickSettings};
+        Button[] buttons={transparency,palette,emoji,steering,arabic,history,magnifierButton,resize,mouse,calculator,command,quickSettings};
         for(Button b:buttons) list.addView(b);
 
         final PopupWindow popup = new PopupWindow(panel,
@@ -162,11 +163,84 @@ public class KeyForgeKeyboardView extends View {
         resize.setOnClickListener(v -> showAndKeepKeyboard(popup, this::showResizeFloatInfo));
         mouse.setOnClickListener(v -> showAndKeepKeyboard(popup, this::showMouseControls));
         calculator.setOnClickListener(v -> showAndKeepKeyboard(popup, this::showCalculator));
+        command.setOnClickListener(v -> showAndKeepKeyboard(popup, this::showCommand));
         quickSettings.setOnClickListener(v -> { popup.dismiss(); service.requestQuickSettingsTiles(); });
 
         popup.showAtLocation(this, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, dp(6));
         drawerOpen = true;
         popup.setOnDismissListener(() -> drawerOpen = false);
+    }
+
+    private void showCommand() {
+        LinearLayout root = new LinearLayout(service);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(10), dp(10), dp(10), dp(10));
+        root.setBackgroundColor(Color.WHITE);
+
+        final Button[] closeHolder = new Button[1];
+        addPopupHeader(root, "Command", closeHolder);
+
+        TextView info = new TextView(service);
+        info.setText("فرمان‌های سریع صفحه‌کلید");
+        info.setTextSize(16);
+        info.setTextColor(BLACK);
+        info.setGravity(Gravity.CENTER);
+        info.setPadding(dp(6), dp(6), dp(6), dp(10));
+        root.addView(info, new LinearLayout.LayoutParams(-1, -2));
+
+        String[][] commands = {
+                {"Copy All", "copyall", "Paste", "paste"},
+                {"Copy Screen", "copyscreen", "Cut", "cut"},
+                {"Undo", "undo", "Redo", "redo"},
+                {"Backspace", "backspace", "Enter", "enter"},
+                {"← Left", "left", "Right →", "right"},
+                {"↑ Up", "up", "↓ Down", "down"},
+                {"Space", "space", "Delete", "delete"}
+        };
+
+        for (String[] rowData : commands) {
+            LinearLayout row = new LinearLayout(service);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(0, dp(2), 0, dp(2));
+            for (int i = 0; i < rowData.length; i += 2) {
+                Button b = drawerButton(rowData[i]);
+                String command = rowData[i + 1];
+                b.setOnClickListener(v -> executeCommand(command));
+                row.addView(b, new LinearLayout.LayoutParams(0, dp(50), 1f));
+            }
+            root.addView(row, new LinearLayout.LayoutParams(-1, dp(54)));
+        }
+
+        final PopupWindow popup = new PopupWindow(root,
+                Math.min(dp(500), Math.max(dp(320), getWidth() - dp(16))),
+                WindowManager.LayoutParams.WRAP_CONTENT, false);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.WHITE));
+        popup.setTouchable(true);
+        popup.setFocusable(false);
+        popup.setOutsideTouchable(true);
+        popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
+        popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+        popup.setElevation(10f);
+        closeHolder[0].setOnClickListener(v -> popup.dismiss());
+        popup.showAtLocation(this, Gravity.CENTER, 0, 0);
+    }
+
+    private boolean executeCommand(String cmd) {
+        if (cmd == null || cmd.isEmpty()) return false;
+        if (cmd.equals("copy") || cmd.equals("copyall")) { service.copyAll(); return true; }
+        if (cmd.equals("copyscreen")) { service.copyScreen(); return true; }
+        if (cmd.equals("paste")) { service.paste(); return true; }
+        if (cmd.equals("cut")) { service.cut(); return true; }
+        if (cmd.equals("undo")) { service.undo(); return true; }
+        if (cmd.equals("redo")) { service.redo(); return true; }
+        if (cmd.equals("backspace") || cmd.equals("delete")) { service.backspace(); return true; }
+        if (cmd.equals("enter")) { service.enter(); return true; }
+        if (cmd.equals("left")) { service.moveCursorHorizontal(-1); return true; }
+        if (cmd.equals("right")) { service.moveCursorHorizontal(1); return true; }
+        if (cmd.equals("up")) { service.move(android.view.KeyEvent.KEYCODE_DPAD_UP); return true; }
+        if (cmd.equals("down")) { service.move(android.view.KeyEvent.KEYCODE_DPAD_DOWN); return true; }
+        if (cmd.equals("space")) { service.type(" "); return true; }
+        return false;
     }
 
     private void showCalculator() {
