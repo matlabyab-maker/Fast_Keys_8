@@ -15,7 +15,6 @@ import java.util.*;
 public class KeyForgeKeyboardView extends View {
     private final KeyForgeInputMethodService service;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Bitmap referenceKeyboard;
     private final Handler handler = new Handler();
     private float gap, keyH;
     private boolean caps = false;
@@ -59,7 +58,6 @@ public class KeyForgeKeyboardView extends View {
     public KeyForgeKeyboardView(KeyForgeInputMethodService s){
         super(s);
         service=s;
-        referenceKeyboard = BitmapFactory.decodeResource(getResources(), getResources().getIdentifier("keyboard_reference", "drawable", service.getPackageName()));
         KEY = service.getSharedPreferences("keyforge_alphaone_settings", android.content.Context.MODE_PRIVATE)
                 .getInt("keyboard_key_color", DEFAULT_KEY);
         setBackgroundColor(BG);
@@ -834,16 +832,106 @@ public class KeyForgeKeyboardView extends View {
 
     private void drawKeyboard(Canvas c){
         float w=getWidth(), h=getHeight();
-        if(referenceKeyboard==null) return;
         float[] bounds=visibleRowBounds();
-        for(int i=0;i<7;i++){
-            if((i==0&&hideTopRow)||(i==1&&hideSuggestionRow)) continue;
-            Rect src=new Rect(0,Math.round(SOURCE_BANDS[i]),referenceKeyboard.getWidth(),Math.round(SOURCE_BANDS[i+1]));
-            RectF dst=new RectF(0,bounds[i]*h,w,bounds[i+1]*h);
-            p.setAlpha(255); p.setFilterBitmap(true); p.setStyle(Paint.Style.FILL);
-            c.drawBitmap(referenceKeyboard,src,dst,p);
+        drawRowsAsRealKeys(c,bounds);
+    }
+
+    private void drawRowsAsRealKeys(Canvas c,float[] b){
+        float w=getWidth(), h=getHeight();
+        // The supplied picture is used only as a visual reference. Every key below is
+        // drawn as a real Android Canvas key; no screenshot/bitmap is placed in the keyboard.
+        float y0=b[0]*h, y1=b[1]*h, y2=b[2]*h, y3=b[3]*h, y4=b[4]*h, y5=b[5]*h, y6=b[6]*h, y7=b[7]*h;
+        if(!hideTopRow) drawTopToolbar(c,y0,y1);
+        if(!hideSuggestionRow) drawSuggestionRow(c,y1,y2);
+        drawNumberRow(c,y2,y3);
+        drawPersianRow(c,y3,y4,true);
+        drawPersianRow(c,y4,y5,false);
+        keyWithBackground(c,getWidth()-getWidth()*0.087f,y3,getWidth()-dp(4),y5,"Enter",NAVY,ENTER_BG,false);
+        drawPersianBottomRow(c,y5,y6);
+        drawBottomRow(c,y6,y7);
+    }
+
+    private void drawTopToolbar(Canvas c,float top,float bottom){
+        float[] weights={0.061f,0.061f,0.062f,0.095f,0.104f,0.080f,0.075f,0.076f,0.076f,0.080f,0.085f,0.061f,0.084f};
+        float gapPx=dp(4), totalGap=gapPx*(weights.length-1), total=0; for(float q:weights) total+=q;
+        float scale=(getWidth()-totalGap)/total, x=0;
+        String[] labels={"↓","↑","MIC","Copy All","Copy Screen","Paste","Cut","Undo","Redo","100\nHistory","امکانات","","Hidden"};
+        for(int i=0;i<labels.length;i++){
+            float cw=weights[i]*scale;
+            if(i==2){ key(c,x,top,x+cw,bottom,"",NAVY,false); drawMicrophone(c,x,top,x+cw,bottom); }
+            else if(i==11){ key(c,x,top,x+cw,bottom,"",NAVY,false); drawMousePointer(c,x,top,x+cw,bottom); }
+            else key(c,x,top,x+cw,bottom,labels[i],NAVY,false);
+            x+=cw+gapPx;
         }
-        if(englishMode) drawEnglishRows(c,bounds);
+    }
+
+    private void drawSuggestionRow(Canvas c,float top,float bottom){
+        float gapPx=dp(4), h=bottom-top;
+        float[] widths={0.12f,0.16f,0.19f,0.25f,0.13f,0.13f};
+        float usable=getWidth()-gapPx*(widths.length+1);
+        float x=gapPx;
+        for(int i=0;i<widths.length;i++){
+            float cw=usable*widths[i];
+            String text=i<4 && i<suggestions.length?suggestions[i]:i==4?"Hidden":"ثابت";
+            key(c,x,top,x+cw,bottom,text,NAVY,false);
+            x+=cw+gapPx;
+        }
+    }
+
+    private void drawNumberRow(Canvas c,float top,float bottom){
+        float gapPx=dp(4), h=bottom-top;
+        int n=12; float reserved=getWidth()*0.115f; float available=getWidth()-reserved-gapPx*13;
+        float cw=available/n;
+        String[] nums=englishMode?new String[]{"1","2","3","4","5","6","7","8","9","0","-","="}:new String[]{"۱","۲","۳","۴","۵","۶","۷","۸","۹","۰","-","="};
+        String[] sym={"!","@","#","$","%","^","&","*","(",")","=","+"};
+        for(int i=0;i<n;i++){
+            String label=(caps? (sym[i]+"\n"+nums[i]) : (i==0?"!\n"+nums[i]:i==1?"@\n"+nums[i]:i==2?"#\n"+nums[i]:i==3?"$\n"+nums[i]:i==4?"%\n"+nums[i]:i==5?"^\n"+nums[i]:i==6?"&\n"+nums[i]:i==7?"*\n"+nums[i]:i==8?"(\n"+nums[i]:i==9?")\n"+nums[i]:i==10?"-\n=":"+\n="));
+            drawTwoLineKey(c,i*(cw+gapPx)+gapPx,top,i*(cw+gapPx)+gapPx+cw,bottom,label);
+        }
+        keyWithBackground(c,getWidth()-reserved+gapPx/2,top,getWidth()-gapPx,bottom,"⌫",NAVY,BACKSPACE_BG,false);
+    }
+
+    private void drawPersianRow(Canvas c,float top,float bottom,boolean first){
+        float gapPx=dp(4), reserved=getWidth()*0.087f, left=gapPx, right=getWidth()-reserved-gapPx;
+        String[] keys=englishMode
+                ? (first?new String[]{"Q","W","E","R","T","Y","U","I","O","P","[", "]","\\"}:new String[]{"Caps","A","S","D","F","G","H","J","K","L",";","'"})
+                : (first?new String[]{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج","چ","پ"}:new String[]{"Caps","ظ","ط","ز","ر","ذ","ژ","د","ت","ن","م","ک","گ"});
+        int count=keys.length; float cw=(right-left-gapPx*(count-1))/count;
+        for(int i=0;i<count;i++){
+            float l=left+i*(cw+gapPx);
+            key(c,l,top,l+cw,bottom,keys[i],NAVY,false);
+        }
+        if(!first) keyWithBackground(c,getWidth()-reserved,top,getWidth()-gapPx,bottom,"Enter",NAVY,ENTER_BG,false);
+    }
+
+    private void drawPersianBottomRow(Canvas c,float top,float bottom){
+        float gapPx=dp(4), left=gapPx, right=getWidth()-gapPx;
+        String[] keys=englishMode?new String[]{"Z","X","C","V","B","N","M",",",".","/","?","",""}:new String[]{"ش","س","ی","ک","ب","ل","ا","ت","ن","م","","","؟","،"};
+        int count=keys.length; float cw=(right-left-gapPx*(count-1))/count;
+        for(int i=0;i<count;i++){
+            float l=left+i*(cw+gapPx);
+            if(keys[i].isEmpty()) key(c,l,top,l+cw,bottom,"",NAVY,false); else key(c,l,top,l+cw,bottom,keys[i],NAVY,false);
+        }
+    }
+
+    private void drawBottomRow(Canvas c,float top,float bottom){
+        float gapPx=dp(4), h=bottom-top;
+        float[] widths={0.09f,0.09f,0.09f,0.32f,0.07f,0.10f,0.10f,0.075f,0.075f};
+        float total=0; for(float q:widths) total+=q; float usable=getWidth()-gapPx*(widths.length+1), scale=usable/total, x=gapPx;
+        String[] labels={"123\n!#@...","🌐","😀","Space","•","←","→","↑","↓"};
+        for(int i=0;i<labels.length;i++){
+            float cw=widths[i]*scale;
+            int bg=(i==3)?SPACE_BG:DEFAULT_KEY;
+            keyWithBackground(c,x,top,x+cw,bottom,labels[i],NAVY,bg,false);
+            x+=cw+gapPx;
+        }
+    }
+
+    private void drawTwoLineKey(Canvas c,float l,float t,float r,float b,String label){
+        key(c,l,t,r,b,"",NAVY,false);
+        String[] a=label.split("\\n",-1);
+        if(a.length==2){ txt(c,a[0],(l+r)/2,t+(b-t)*.34f,Math.min(20,(b-t)*.28f),NAVY); txt(c,a[1],(l+r)/2,t+(b-t)*.69f,Math.min(20,(b-t)*.28f),NAVY); }
+        else txt(c,label,(l+r)/2,(t+b)/2,Math.min(20,(b-t)*.35f),NAVY);
     }
 
     private void drawEnglishRows(Canvas c,float[] bounds){
@@ -1135,7 +1223,7 @@ public class KeyForgeKeyboardView extends View {
             return;
         }
         if(row==1){
-            if(nx>0.73f && nx<0.88f){ hideSuggestionRow=true; invalidate(); return; }
+            if(nx>0.74f && nx<0.88f){ hideSuggestionRow=true; invalidate(); return; }
             if(nx<0.17f && !suggestions[0].isEmpty()) service.replaceCurrentWord(suggestions[0]);
             else if(nx<0.31f && !suggestions[1].isEmpty()) service.replaceCurrentWord(suggestions[1]);
             else if(nx<0.47f && !suggestions[2].isEmpty()) service.replaceCurrentWord(suggestions[2]);
